@@ -78,6 +78,16 @@ jobs:
             sleep 15
           done
           echo "Timed out waiting for job"; exit 1
+          
+      - name: Debug - find screenshots in container
+        if: always()
+        run: |
+          echo "--- PNG files anywhere in the container ---"
+          docker exec uipath-robot sh -c 'find / -name "*.png" -mmin -30 -not -path "/proc/*" -not -path "/usr/*" 2>/dev/null' || true
+          echo "--- screenshots folder ---"
+          docker exec uipath-robot ls -la /home/robotuser/screenshots || true
+          echo "--- working directory ---"
+          docker exec uipath-robot sh -c 'pwd; ls -la' || true          
 
       - name: Collect robot logs and clean up
         if: always()
