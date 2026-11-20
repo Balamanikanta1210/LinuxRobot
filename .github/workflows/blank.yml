@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  ROBOT_TAG: ""   # e.g. a specific tag from UiPath; leave empty to try :latest
+  ROBOT_TAG: ""   # set to a tag you know works (e.g. latest24.10) to skip the search
   UIPATH_HOST: https://staging.uipath.com
   ORCH_URL: https://staging.uipath.com/uipatransbfh/BalaTenant/orchestrator_
   PROCESS_NAME: Linux_Unattended_Automation
@@ -25,12 +25,16 @@ jobs:
       - name: Start UiPath Linux robot
         run: |
           IMAGE=""
-          for BASE in uipathprod.azurecr.io/robot/uiautomation-runtime registry.uipath.com/robot/uiautomation-runtime; do
-            REF="$BASE${ROBOT_TAG:+:$ROBOT_TAG}"
-            echo "Trying $REF"
-            if docker pull "$REF"; then IMAGE="$REF"; break; fi
+          if [ -n "$ROBOT_TAG" ]; then TAGS="$ROBOT_TAG"; else TAGS="latest26.10 latest25.10 latest24.10"; fi
+          for TAG in $TAGS; do
+            for BASE in uipathprod.azurecr.io/robot/uiautomation-runtime registry.uipath.com/robot/uiautomation-runtime; do
+              REF="$BASE:$TAG"
+              echo "Trying $REF"
+              if docker pull "$REF"; then IMAGE="$REF"; break 2; fi
+            done
           done
-          [ -n "$IMAGE" ] || { echo "Could not pull the robot image from either registry"; exit 1; }
+          [ -n "$IMAGE" ] || { echo "Could not pull the robot image with any tag/registry"; exit 1; }
+          echo "Using image $IMAGE"
 
           docker run -e LICENSE_AGREEMENT=accept \
             -e ORCHESTRATOR_URL="$ORCH_URL" \
