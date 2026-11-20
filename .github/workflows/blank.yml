@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  ROBOT_IMAGE: uipathprod.azurecr.io/robot/uiautomation-runtime
+  ROBOT_TAG: ""   # e.g. a specific tag from UiPath; leave empty to try :latest
   UIPATH_HOST: https://staging.uipath.com
   ORCH_URL: https://staging.uipath.com/uipatransbfh/BalaTenant/orchestrator_
   PROCESS_NAME: Linux_Unattended_Automation
@@ -24,12 +24,19 @@ jobs:
 
       - name: Start UiPath Linux robot
         run: |
-          docker pull "$ROBOT_IMAGE"
+          IMAGE=""
+          for BASE in uipathprod.azurecr.io/robot/uiautomation-runtime registry.uipath.com/robot/uiautomation-runtime; do
+            REF="$BASE${ROBOT_TAG:+:$ROBOT_TAG}"
+            echo "Trying $REF"
+            if docker pull "$REF"; then IMAGE="$REF"; break; fi
+          done
+          [ -n "$IMAGE" ] || { echo "Could not pull the robot image from either registry"; exit 1; }
+
           docker run -e LICENSE_AGREEMENT=accept \
             -e ORCHESTRATOR_URL="$ORCH_URL" \
             -e CLIENT_ID="$UIPATH_CLIENT_ID" \
             -e CLIENT_SECRET="$UIPATH_CLIENT_SECRET" \
-            -d --name uipath-robot "$ROBOT_IMAGE"
+            -d --name uipath-robot "$IMAGE"
           sleep 30
           docker logs uipath-robot | tail -n 30
 
