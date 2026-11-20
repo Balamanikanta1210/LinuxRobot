@@ -82,12 +82,27 @@ jobs:
       - name: Collect robot logs and clean up
         if: always()
         run: |
-          docker cp uipath-robot:/home/robotuser/.local/share/UiPath/Logs ./robot-logs || true
+          mkdir -p robot-logs screenshots
+
+          # Robot logs
+          docker cp uipath-robot:/home/robotuser/.local/share/UiPath/Logs/. ./robot-logs/ || true
+
+          # Screenshots saved in /home/robotuser/screenshots (the "/." copies the folder's contents)
+          docker cp uipath-robot:/home/robotuser/screenshots/. ./screenshots/ || true
+
+          # Fallback: any PNGs the robot saved in /tmp
+          for f in $(docker exec uipath-robot sh -c 'ls /tmp/*.png 2>/dev/null'); do
+            docker cp "uipath-robot:$f" ./screenshots/ || true
+          done
+
           docker stop uipath-robot || true
           docker rm uipath-robot || true
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: robot-logs
-          path: robot-logs/
+          name: robot-output
+          path: |
+            robot-logs/
+            screenshots/
+          if-no-files-found: warn
