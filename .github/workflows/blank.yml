@@ -79,15 +79,15 @@ jobs:
           done
           echo "Timed out waiting for job"; exit 1
           
-      - name: Debug - find screenshots in container
+      - name: Debug - check container output
         if: always()
         run: |
-          echo "--- PNG files anywhere in the container ---"
-          docker exec uipath-robot sh -c 'find / -name "*.png" -mmin -30 -not -path "/proc/*" -not -path "/usr/*" 2>/dev/null' || true
           echo "--- screenshots folder ---"
           docker exec uipath-robot ls -la /home/robotuser/screenshots || true
-          echo "--- working directory ---"
-          docker exec uipath-robot sh -c 'pwd; ls -la' || true          
+          echo "--- PNG files created in the last 30 minutes ---"
+          docker exec uipath-robot sh -c 'find / -name "*.png" -mmin -30 -not -path "/proc/*" -not -path "/usr/*" 2>/dev/null' || true
+          echo "--- robot logs in container ---"
+          docker exec uipath-robot sh -c 'ls -la /home/robotuser/.local/share/UiPath/Logs; grep -rih "screenshot\|Linux_Unattended_Automation" /home/robotuser/.local/share/UiPath/Logs | tail -n 30' || true     
 
       - name: Collect robot logs and clean up
         if: always()
