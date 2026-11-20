@@ -43,6 +43,11 @@ jobs:
             -d --name uipath-robot "$IMAGE"
           sleep 30
           docker logs uipath-robot | tail -n 30
+          
+      - name: Create screenshots folder in robot container
+        run: |
+          docker exec -u 1000 uipath-robot mkdir -p /home/robotuser/screenshots
+          docker exec uipath-robot ls -ld /home/robotuser/screenshots
 
       - name: Start the process in Orchestrator
         run: |
