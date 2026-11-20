@@ -1,0 +1,82 @@
+name: Launch Google with UiPath Linux Robot
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  ROBOT_IMAGE: uipathprod.azurecr.io/robot/uiautomation-runtime
+  UIPATH_HOST: https://staging.uipath.com
+  ORCH_URL: https://staging.uipath.com/uipatransbfh/BalaTenant/orchestrator_
+  PROCESS_NAME: Linux_Unattended_Automation
+  FOLDER_ID: "827724"
+  UIPATH_CLIENT_ID: '93ca7869-024e-4637-b444-23a0f8a1877e'
+  UIPATH_CLIENT_SECRET: '3DnLwd59N7VWLK62'
+  API_CLIENT_ID: '7664bfd0-0cc6-44c1-8347-2a786a016564'
+  API_CLIENT_SECRET: '9*tzjmFVXBZjZr9%R1Fyq7qtyO6EdApDgNVqDdlUzV20nK?5_Yz~*yt)UlZLn29p'
+
+jobs:
+  run-robot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start UiPath Linux robot
+        run: |
+          docker pull "$ROBOT_IMAGE"
+          docker run -e LICENSE_AGREEMENT=accept \
+            -e ORCHESTRATOR_URL="$ORCH_URL" \
+            -e CLIENT_ID="$UIPATH_CLIENT_ID" \
+            -e CLIENT_SECRET="$UIPATH_CLIENT_SECRET" \
+            -d --name uipath-robot "$ROBOT_IMAGE"
+          sleep 30
+          docker logs uipath-robot | tail -n 30
+
+      - name: Start the process in Orchestrator
+        run: |
+          TOKEN=$(curl -s -X POST "$UIPATH_HOST/identity_/connect/token" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=$API_CLIENT_ID" \
+            --data-urlencode "client_secret=$API_CLIENT_SECRET" \
+            --data-urlencode "scope=OR.Jobs OR.Execution OR.Folders" | jq -r .access_token)
+          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] || { echo "Token request failed"; exit 1; }
+
+          RELEASE_KEY=$(curl -s -H "Authorization: Bearer $TOKEN" \
+            -H "X-UIPATH-OrganizationUnitId: $FOLDER_ID" \
+            "$ORCH_URL/odata/Releases?\$filter=Name%20eq%20'$PROCESS_NAME'" | jq -r '.value[0].Key')
+          [ -n "$RELEASE_KEY" ] && [ "$RELEASE_KEY" != "null" ] || { echo "Process not found in folder"; exit 1; }
+
+          JOB_KEY=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+            -H "X-UIPATH-OrganizationUnitId: $FOLDER_ID" \
+            -H "Content-Type: application/json" \
+            "$ORCH_URL/odata/Jobs/UiPath.Server.Configuration.OData.StartJobs" \
+            -d "{\"startInfo\":{\"ReleaseKey\":\"$RELEASE_KEY\",\"Strategy\":\"ModernJobsCount\",\"JobsCount\":1}}" \
+            | jq -r '.value[0].Key')
+          echo "Started job $JOB_KEY"
+
+          for i in $(seq 1 40); do
+            STATE=$(curl -s -H "Authorization: Bearer $TOKEN" \
+              -H "X-UIPATH-OrganizationUnitId: $FOLDER_ID" \
+              "$ORCH_URL/odata/Jobs?\$filter=Key%20eq%20$JOB_KEY" | jq -r '.value[0].State')
+            echo "State: $STATE"
+            case "$STATE" in
+              Successful) exit 0 ;;
+              Faulted|Stopped) exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "Timed out waiting for job"; exit 1
+
+      - name: Collect robot logs and clean up
+        if: always()
+        run: |
+          docker cp uipath-robot:/home/robotuser/.local/share/UiPath/Logs ./robot-logs || true
+          docker stop uipath-robot || true
+          docker rm uipath-robot || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: robot-logs
+          path: robot-logs/
