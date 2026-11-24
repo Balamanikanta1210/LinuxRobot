@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  ROBOT_TAG: "latest24.10"   # set to a tag you know works (e.g. latest24.10) to skip the search900
+  ROBOT_TAG: "latest24.10"   # set to a tag you know works (e.g. latest24.10) to skip the search
   UIPATH_HOST: https://staging.uipath.com
   ORCH_URL: https://staging.uipath.com/uipatransbfh/BalaTenant/orchestrator_
   PROCESS_NAME: Linux_Unattended_Automation
