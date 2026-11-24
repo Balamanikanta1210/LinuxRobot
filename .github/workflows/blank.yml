@@ -66,10 +66,13 @@ jobs:
           docker logs uipath-robot 2>&1 | grep -iE "connected|ConnectToServer|Unauthorized|1431" || true
           docker logs uipath-robot 2>&1 | tail -n 30
 
-      - name: Create screenshots folder in robot container
+      - name: Keep robot alive for 3 minutes
         run: |
-          docker exec -u 1000 uipath-robot mkdir -p /home/robotuser/screenshots
-          docker exec uipath-robot ls -ld /home/robotuser/screenshots
+          echo "Holding robot container for 180 seconds..."
+          for i in $(seq 1 6); do
+            sleep 30
+            echo "[$((i*30))s] container: $(docker inspect -f '{{.State.Status}}' uipath-robot)"
+          done
 
       - name: Run the process with UiPath CLI (job run)
         run: |
