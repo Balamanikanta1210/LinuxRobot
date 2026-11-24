@@ -45,5 +45,5 @@ jobs:
             -e CLIENT_ID="$UIPATH_CLIENT_ID" \
             -e CLIENT_SECRET="$UIPATH_CLIENT_SECRET" \
             -d --name uipath-robot "$IMAGE"
-          sleep 1000
+          sleep 30
           docker logs uipath-robot | tail -n 30
