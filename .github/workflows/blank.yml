@@ -85,8 +85,6 @@ jobs:
             --applicationScope "OR.Execution OR.Folders OR.Jobs OR.Machines OR.Users OR.Robots OR.Settings OR.BackgroundTasks OR.Monitoring" \
             --identityUrl "$UIPATH_HOST/identity_" \
             -o "$FOLDER_NAME" \
-            --user "$ROBOT_ACCOUNT" \
-            --machine "$MACHINE_NAME" \
             --job_type Unattended \
             -j 1 \
             -W 900 \
