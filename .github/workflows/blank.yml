@@ -17,8 +17,8 @@ env:
   MACHINE_NAME: "Linux_Robot"       # machine template the container connects with
   CLI_VERSION: ""                   # optional, e.g. 25.10.6; empty = latest UiPath.CLI.Linux
   # Secrets: add these in Settings > Secrets and variables > Actions
-  UIPATH_CLIENT_ID: "93ca7869-024e-4637-b444-23a0f8a1877e"
-  UIPATH_CLIENT_SECRET: "3DnLwd59N7VWLK62"
+  UIPATH_CLIENT_ID: "94adb75d-21ca-495e-bb16-8a3380991ff2"
+  UIPATH_CLIENT_SECRET: "qq1V1Fc8UemZ02GW"
   API_CLIENT_ID: "7664bfd0-0cc6-44c1-8347-2a786a016564"
   API_CLIENT_SECRET: "9*tzjmFVXBZjZr9%R1Fyq7qtyO6EdApDgNVqDdlUzV20nK?5_Yz~*yt)UlZLn29p"
 
