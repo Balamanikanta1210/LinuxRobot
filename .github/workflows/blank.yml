@@ -11,8 +11,8 @@ env:
   ORCH_URL: https://staging.uipath.com/uipatransbfh/BalaTenant/orchestrator_
   PROCESS_NAME: Linux_Unattended_Automation
   FOLDER_ID: "827724"
-  UIPATH_CLIENT_ID: '93ca7869-024e-4637-b444-23a0f8a1877e'
-  UIPATH_CLIENT_SECRET: '3DnLwd59N7VWLK62'
+  UIPATH_CLIENT_ID: '94adb75d-21ca-495e-bb16-8a3380991ff2'
+  UIPATH_CLIENT_SECRET: '2E1lLZpt2r19Ri1T'
   API_CLIENT_ID: '7664bfd0-0cc6-44c1-8347-2a786a016564'
   API_CLIENT_SECRET: '9*tzjmFVXBZjZr9%R1Fyq7qtyO6EdApDgNVqDdlUzV20nK?5_Yz~*yt)UlZLn29p'
 
