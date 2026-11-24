@@ -6,19 +6,23 @@ on:
   workflow_dispatch:
 
 env:
-  ROBOT_TAG: "latest26.10"   # set to a tag you know works (e.g. latest24.10) to skip the search
+  ROBOT_TAG: "latest26.10"      # set to a tag you know works (e.g. latest24.10) to skip the search
   UIPATH_HOST: https://staging.uipath.com
   ORCH_URL: https://staging.uipath.com/uipatransbfh/BalaTenant/orchestrator_
   PROCESS_NAME: Linux_Unattended_Automation
   FOLDER_ID: "827724"
-  UIPATH_CLIENT_ID: '94adb75d-21ca-495e-bb16-8a3380991ff2'
-  UIPATH_CLIENT_SECRET: '2E1lLZpt2r19Ri1T'
-  API_CLIENT_ID: '7664bfd0-0cc6-44c1-8347-2a786a016564'
-  API_CLIENT_SECRET: '9*tzjmFVXBZjZr9%R1Fyq7qtyO6EdApDgNVqDdlUzV20nK?5_Yz~*yt)UlZLn29p'
+  ROBOT_ACCOUNT: "robo"         # robot account the job must run as
+  MACHINE_NAME: "Linux_Robot"   # machine template the container connects with
+  # Secrets: add these in Settings > Secrets and variables > Actions
+  UIPATH_CLIENT_ID: ${{ secrets.UIPATH_CLIENT_ID }}
+  UIPATH_CLIENT_SECRET: ${{ secrets.UIPATH_CLIENT_SECRET }}
+  API_CLIENT_ID: ${{ secrets.API_CLIENT_ID }}
+  API_CLIENT_SECRET: ${{ secrets.API_CLIENT_SECRET }}
 
 jobs:
   run-robot:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -43,19 +47,19 @@ jobs:
             -d --name uipath-robot "$IMAGE"
           sleep 30
           docker logs uipath-robot | tail -n 30
-          
+
       - name: Create screenshots folder in robot container
         run: |
           docker exec -u 1000 uipath-robot mkdir -p /home/robotuser/screenshots
           docker exec uipath-robot ls -ld /home/robotuser/screenshots
 
-      - name: Start the process in Orchestrator
+      - name: Start the process in Orchestrator (as robot account)
         run: |
           TOKEN=$(curl -s -X POST "$UIPATH_HOST/identity_/connect/token" \
             --data-urlencode "grant_type=client_credentials" \
             --data-urlencode "client_id=$API_CLIENT_ID" \
             --data-urlencode "client_secret=$API_CLIENT_SECRET" \
-            --data-urlencode "scope=OR.Jobs OR.Execution OR.Folders" | jq -r .access_token)
+            --data-urlencode "scope=OR.Jobs OR.Execution OR.Folders OR.Users.Read OR.Machines.Read" | jq -r .access_token)
           [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] || { echo "Token request failed"; exit 1; }
 
           RELEASE_KEY=$(curl -s -H "Authorization: Bearer $TOKEN" \
@@ -63,12 +67,35 @@ jobs:
             "$ORCH_URL/odata/Releases?\$filter=Name%20eq%20'$PROCESS_NAME'" | jq -r '.value[0].Key')
           [ -n "$RELEASE_KEY" ] && [ "$RELEASE_KEY" != "null" ] || { echo "Process not found in folder"; exit 1; }
 
-          JOB_KEY=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+          # --- Resolve the robot account and the connected machine session ---
+          ROBOT_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+            -H "X-UIPATH-OrganizationUnitId: $FOLDER_ID" \
+            "$ORCH_URL/odata/Users?\$filter=UserName%20eq%20'$ROBOT_ACCOUNT'&\$expand=UnattendedRobot" \
+            | jq -r '.value[0].UnattendedRobot.RobotId')
+          [ -n "$ROBOT_ID" ] && [ "$ROBOT_ID" != "null" ] || { echo "Robot account '$ROBOT_ACCOUNT' not found (check name, folder assignment, OR.Users.Read scope)"; exit 1; }
+
+          TEMPLATE_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+            -H "X-UIPATH-OrganizationUnitId: $FOLDER_ID" \
+            "$ORCH_URL/odata/Machines?\$filter=Name%20eq%20'$MACHINE_NAME'" | jq -r '.value[0].Id')
+          [ -n "$TEMPLATE_ID" ] && [ "$TEMPLATE_ID" != "null" ] || { echo "Machine '$MACHINE_NAME' not found (check name, OR.Machines.Read scope)"; exit 1; }
+
+          SESSIONS=$(curl -s -H "Authorization: Bearer $TOKEN" \
+            -H "X-UIPATH-OrganizationUnitId: $FOLDER_ID" \
+            "$ORCH_URL/odata/Sessions/UiPath.Server.Configuration.OData.GetMachineSessions(key=$TEMPLATE_ID)")
+          echo "$SESSIONS" | jq -c '.value[]? | {SessionId, Id, IsConnected, HostMachineName}'
+          # prefer a connected session; fall back to the last one listed
+          SESSION_ID=$(echo "$SESSIONS" | jq -r '([.value[]? | select(.IsConnected == true)][0] // .value[-1]) | (.SessionId // .Id)')
+          [ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "null" ] || { echo "No machine session found for '$MACHINE_NAME'"; exit 1; }
+          echo "Robot account=$ROBOT_ACCOUNT RobotId=$ROBOT_ID Machine=$MACHINE_NAME TemplateId=$TEMPLATE_ID SessionId=$SESSION_ID"
+
+          # --- Start the job on that robot + machine ---
+          START_RESP=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" \
             -H "X-UIPATH-OrganizationUnitId: $FOLDER_ID" \
             -H "Content-Type: application/json" \
             "$ORCH_URL/odata/Jobs/UiPath.Server.Configuration.OData.StartJobs" \
-            -d "{\"startInfo\":{\"ReleaseKey\":\"$RELEASE_KEY\",\"Strategy\":\"ModernJobsCount\",\"JobsCount\":1}}" \
-            | jq -r '.value[0].Key')
+            -d "{\"startInfo\":{\"ReleaseKey\":\"$RELEASE_KEY\",\"RobotIds\":[$ROBOT_ID],\"MachineSessionIds\":[$SESSION_ID],\"JobsCount\":1,\"Strategy\":\"ModernJobsCount\",\"RuntimeType\":\"Unattended\",\"InputArguments\":\"{}\"}}")
+          JOB_KEY=$(echo "$START_RESP" | jq -r '.value[0].Key')
+          [ -n "$JOB_KEY" ] && [ "$JOB_KEY" != "null" ] || { echo "StartJobs failed: $START_RESP"; exit 1; }
           echo "Started job $JOB_KEY"
 
           for i in $(seq 1 40); do
@@ -83,7 +110,7 @@ jobs:
             sleep 15
           done
           echo "Timed out waiting for job"; exit 1
-          
+
       - name: Debug - check container output
         if: always()
         run: |
@@ -92,7 +119,7 @@ jobs:
           echo "--- PNG files created in the last 30 minutes ---"
           docker exec uipath-robot sh -c 'find / -name "*.png" -mmin -30 -not -path "/proc/*" -not -path "/usr/*" 2>/dev/null' || true
           echo "--- robot logs in container ---"
-          docker exec uipath-robot sh -c 'ls -la /home/robotuser/.local/share/UiPath/Logs; grep -rih "screenshot\|Linux_Unattended_Automation" /home/robotuser/.local/share/UiPath/Logs | tail -n 30' || true     
+          docker exec uipath-robot sh -c 'ls -la /home/robotuser/.local/share/UiPath/Logs; grep -rih "screenshot\|Linux_Unattended_Automation" /home/robotuser/.local/share/UiPath/Logs | tail -n 30' || true
 
       - name: Collect robot logs and clean up
         if: always()
