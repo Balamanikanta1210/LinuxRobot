@@ -63,7 +63,7 @@ jobs:
           --data-urlencode "grant_type=client_credentials" \
           --data-urlencode "client_id=$API_CLIENT_ID" \
           --data-urlencode "client_secret=$API_CLIENT_SECRET" \
-          --data-urlencode "scope=OR.Jobs OR.Execution OR.Folders OR.Users.Read OR.Machines.Read")
+          --data-urlencode "scope=OR.Execution OR.Folders OR.Jobs OR.Machines OR.Users")
           TOKEN=$(echo "$TOKEN_RESP" | jq -r .access_token)
           [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] || { echo "Token request failed: $(echo "$TOKEN_RESP" | jq -c 'del(.access_token)')"; exit 1; }
 
