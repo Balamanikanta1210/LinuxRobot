@@ -73,12 +73,18 @@ jobs:
           [ -n "$RELEASE_KEY" ] && [ "$RELEASE_KEY" != "null" ] || { echo "Process not found in folder"; exit 1; }
 
           # --- Resolve the robot account and the connected machine session ---
-          ROBOT_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
-            -H "X-UIPATH-OrganizationUnitId: $FOLDER_ID" \
-            "$ORCH_URL/odata/Users?\$filter=UserName%20eq%20'$ROBOT_ACCOUNT'&\$expand=UnattendedRobot" \
-            | jq -r '.value[0].UnattendedRobot.RobotId')
-          [ -n "$ROBOT_ID" ] && [ "$ROBOT_ID" != "null" ] || { echo "Robot account '$ROBOT_ACCOUNT' not found (check name, folder assignment, OR.Users.Read scope)"; exit 1; }
-
+          USERS_RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $TOKEN" \
+          -H "X-UIPATH-OrganizationUnitId: $FOLDER_ID" \
+          "$ORCH_URL/odata/Users?\$filter=Name%20eq%20'$ROBOT_ACCOUNT'")
+          USERS_HTTP=$(echo "$USERS_RESP" | tail -n 1)
+          USERS_BODY=$(echo "$USERS_RESP" | sed '$d')
+          ROBOT_ID=$(echo "$USERS_BODY" | jq -r '.value[0].UnattendedRobot.RobotId')
+          if [ -z "$ROBOT_ID" ] || [ "$ROBOT_ID" = "null" ]; then
+          echo "Robot account '$ROBOT_ACCOUNT' lookup failed (HTTP $USERS_HTTP): $(echo "$USERS_BODY" | head -c 400)"
+          exit 1
+          fi
+          echo "RobotId=$ROBOT_ID"
+          
           TEMPLATE_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
             -H "X-UIPATH-OrganizationUnitId: $FOLDER_ID" \
             "$ORCH_URL/odata/Machines?\$filter=Name%20eq%20'$MACHINE_NAME'" | jq -r '.value[0].Id')
