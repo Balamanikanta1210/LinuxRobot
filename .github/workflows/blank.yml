@@ -69,7 +69,7 @@ jobs:
       - name: Keep robot alive for 3 minutes
         run: |
           echo "Holding robot container for 180 seconds..."
-          for i in $(seq 1 6); do
+          for i in $(seq 1 1); do
             sleep 30
             echo "[$((i*30))s] container: $(docker inspect -f '{{.State.Status}}' uipath-robot)"
           done
@@ -111,6 +111,11 @@ jobs:
         run: |
           mkdir -p robot-logs screenshots chrome-logs
 
+            docker exec uipath-robot sh -c 'find / \( -name "chrome_debug.log" -o -name "chrome*.log" \) -not -path "/proc/*" 2>/dev/null' \
+            | while read f; do
+                docker cp "uipath-robot:$f" "chrome-logs/$(echo "$f" | tr '/' '_')" || true
+              done
+
           docker cp uipath-robot:/home/robotuser/.local/share/UiPath/Logs/. ./robot-logs/ || true
           docker cp uipath-robot:/home/robotuser/screenshots/. ./screenshots/ || true
 
@@ -118,10 +123,7 @@ jobs:
             docker cp "uipath-robot:$f" ./screenshots/ || true
           done
 
-          docker exec uipath-robot sh -c 'find / \( -name "chrome_debug.log" -o -name "chrome*.log" \) -not -path "/proc/*" 2>/dev/null' \
-            | while read f; do
-                docker cp "uipath-robot:$f" "chrome-logs/$(echo "$f" | tr '/' '_')" || true
-              done
+
 
           docker stop uipath-robot || true
           docker rm uipath-robot || true
