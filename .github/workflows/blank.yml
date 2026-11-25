@@ -109,7 +109,7 @@ jobs:
       - name: Collect robot logs and clean up
         if: always()
         run: |
-          mkdir -p robot-logs screenshots
+          mkdir -p robot-logs screenshots chrome-logs
 
           docker cp uipath-robot:/home/robotuser/.local/share/UiPath/Logs/. ./robot-logs/ || true
           docker cp uipath-robot:/home/robotuser/screenshots/. ./screenshots/ || true
@@ -117,6 +117,11 @@ jobs:
           for f in $(docker exec uipath-robot sh -c 'ls /tmp/*.png 2>/dev/null'); do
             docker cp "uipath-robot:$f" ./screenshots/ || true
           done
+
+          docker exec uipath-robot sh -c 'find / \( -name "chrome_debug.log" -o -name "chrome*.log" \) -not -path "/proc/*" 2>/dev/null' \
+            | while read f; do
+                docker cp "uipath-robot:$f" "chrome-logs/$(echo "$f" | tr '/' '_')" || true
+              done
 
           docker stop uipath-robot || true
           docker rm uipath-robot || true
