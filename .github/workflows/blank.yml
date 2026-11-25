@@ -109,21 +109,22 @@ jobs:
       - name: Collect robot logs and clean up
         if: always()
         run: |
-          mkdir -p robot-logs screenshots chrome-logs
+          mkdir -p robot-logs chrome-logs
 
-            docker exec uipath-robot sh -c 'find / \( -name "chrome_debug.log" -o -name "chrome*.log" \) -not -path "/proc/*" 2>/dev/null' \
+          docker cp uipath-robot:/home/robotuser/.local/share/UiPath/Logs/. ./robot-logs/ || true
+
+          # Diagnostics: always produces a file, even if no Chrome log exists
+          {
+            echo "--- chrome processes (empty if Chrome already exited) ---"
+            docker exec uipath-robot sh -c 'ps aux | grep -i [c]hrome' || true
+            echo "--- .log files modified in the last 60 minutes ---"
+            docker exec uipath-robot sh -c 'find / -name "*.log" -mmin -60 -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null' || true
+          } > chrome-logs/diagnostics.txt 2>&1
+
+          docker exec uipath-robot sh -c 'find / \( -name "chrome_debug.log" -o -name "chrome*.log" \) -not -path "/proc/*" 2>/dev/null' \
             | while read f; do
                 docker cp "uipath-robot:$f" "chrome-logs/$(echo "$f" | tr '/' '_')" || true
               done
-
-          docker cp uipath-robot:/home/robotuser/.local/share/UiPath/Logs/. ./robot-logs/ || true
-          docker cp uipath-robot:/home/robotuser/screenshots/. ./screenshots/ || true
-
-          for f in $(docker exec uipath-robot sh -c 'ls /tmp/*.png 2>/dev/null'); do
-            docker cp "uipath-robot:$f" ./screenshots/ || true
-          done
-
-
 
           docker stop uipath-robot || true
           docker rm uipath-robot || true
